@@ -1,0 +1,54 @@
+[
+  {
+    "id": "find_3dgs",
+    "task": "3D Gaussian Splatting for Real-Time Radiance Field Rendering 这篇论文的 arXiv 编号是多少？",
+    "check": {"answer_contains_all": ["2308.04079"]}
+  },
+  {
+    "id": "find_nerf",
+    "task": "NeRF 原论文（Representing Scenes as Neural Radiance Fields for View Synthesis）的 arXiv 编号和第一作者是什么？",
+    "check": {"answer_contains_all": ["2003.08934", "Mildenhall"]}
+  },
+  {
+    "id": "find_sam",
+    "task": "Meta 的 Segment Anything 论文的 arXiv 编号是多少？",
+    "check": {"answer_contains_all": ["2304.02643"]}
+  },
+  {
+    "id": "find_transformer",
+    "task": "Attention Is All You Need 的 arXiv 编号是多少？",
+    "check": {"answer_contains_all": ["1706.03762"]}
+  },
+  {
+    "id": "ambiguous_gaussianeditor",
+    "task": "GaussianEditor 这篇论文的 arXiv 编号是多少？",
+    "note": "有两篇同名论文，应该都列出来",
+    "check": {"answer_contains_all": ["2311.14521", "2311.16037"]}
+  },
+  {
+    "id": "number_3dgs_psnr",
+    "task": "论文 2308.04079 中，完整模型（30K 次迭代）在 Mip-NeRF360 数据集上的 PSNR 是多少？请注明出处。",
+    "check": {"answer_contains_all": ["27.21"]}
+  },
+  {
+    "id": "number_sam_images",
+    "task": "论文 2304.02643 提出的 SA-1B 数据集包含多少张图像？",
+    "check": {"answer_regex": "11\\s*(M|million|百万)|1100\\s*万|1,?100\\s*万|一千一百万"}
+  },
+  {
+    "id": "negative_scannet",
+    "task": "论文 2308.04079 有没有在 ScanNet 数据集上做实验？",
+    "note": "原文没有 ScanNet，应回答没有，而不是编造结果",
+    "check": {"answer_contains_any": ["没有", "未在", "并未", "未使用", "未包含", "未涉及", "不包含"]}
+  },
+  {
+    "id": "note_3dgs",
+    "task": "为论文 2308.04079 写一份中文速读笔记，保存为 3dgs.md。",
+    "check": {"note_file": "3dgs.md", "note_contains_all": ["2308.04079", "高斯"], "note_min_chars": 300}
+  },
+  {
+    "id": "search_then_read",
+    "task": "找到 Mip-NeRF 360 这篇论文（Barron 等人），告诉我它的 arXiv 编号，以及它主要解决什么问题。",
+    "check": {"answer_contains_all": ["2111.12077"]}
+  }
+]

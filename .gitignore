@@ -1,0 +1,8 @@
+.env
+cache/
+notes/
+runs/
+eval/results/
+__pycache__/
+*.pyc
+.DS_Store
