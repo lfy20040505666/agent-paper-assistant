@@ -60,22 +60,29 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--only", nargs="*", help="只跑这些 id 的题")
     parser.add_argument("--max-steps", type=int, default=12)
+    parser.add_argument("--impl", choices=["handwritten", "langchain"], default="handwritten",
+                        help="评测哪个版本：手写版（默认）或 LangChain 版")
     args = parser.parse_args()
 
     load_dotenv()
     try:
-        llm = DeepSeekClient()
+        llm = DeepSeekClient()  # 两个版本都读同一组环境变量，这里顺便检查 Key 并拿到模型名
     except LLMError as e:
         sys.exit(str(e))
 
     tasks = json.loads((ROOT / "eval" / "tasks.json").read_text(encoding="utf-8"))
     if args.only:
         tasks = [t for t in tasks if t["id"] in args.only]
-    out_dir = ROOT / "eval" / "results" / datetime.now().strftime("%Y%m%d-%H%M%S")
+    out_dir = ROOT / "eval" / "results" / (datetime.now().strftime("%Y%m%d-%H%M%S") + f"-{args.impl}")
     notes_dir = out_dir / "notes"  # 每次评测单独存笔记，不和上次的混在一起
     # 论文缓存共用，避免重复下载；它不影响判分
     tools = PaperTools(CACHE_DIR, notes_dir)
-    agent = PaperAgent(llm, tools, max_steps=args.max_steps, trace_dir=out_dir / "traces")
+    if args.impl == "langchain":
+        from paper_agent.lc_agent import LangChainPaperAgent, make_deepseek_model
+        agent = LangChainPaperAgent(make_deepseek_model(), tools, max_steps=args.max_steps,
+                                    trace_dir=out_dir / "traces")
+    else:
+        agent = PaperAgent(llm, tools, max_steps=args.max_steps, trace_dir=out_dir / "traces")
 
     rows = []
     for i, t in enumerate(tasks, 1):
@@ -88,8 +95,9 @@ def main():
                    "empty_searches": count_empty_searches(r.trace_path),
                    "prompt_tokens": r.prompt_tokens, "completion_tokens": r.completion_tokens,
                    "seconds": r.seconds, "answer": r.answer, "trace": r.trace_path}
-        except LLMError as e:
-            row = {"id": t["id"], "passed": False, "reason": f"调用模型失败：{e}", "stopped_reason": "error",
+        except Exception as e:  # 手写版抛 LLMError，LangChain 版抛 openai 的异常，统一记为失败
+            row = {"id": t["id"], "passed": False, "reason": f"调用模型失败：{type(e).__name__}: {e}"[:300],
+                   "stopped_reason": "error",
                    "steps": 0, "tool_calls": 0, "tools_used": [], "empty_searches": 0,
                    "prompt_tokens": 0, "completion_tokens": 0,
                    "seconds": 0, "answer": "", "trace": ""}
@@ -99,7 +107,7 @@ def main():
 
     out_dir.mkdir(parents=True, exist_ok=True)
     (out_dir / "results.json").write_text(json.dumps(rows, ensure_ascii=False, indent=2), encoding="utf-8")
-    summary = render_summary(rows, llm.model)
+    summary = render_summary(rows, f"{llm.model}，{args.impl}")
     (out_dir / "summary.md").write_text(summary, encoding="utf-8")
     print("\n" + summary)
     print(f"明细：{out_dir / 'results.json'}")

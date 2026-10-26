@@ -1,0 +1,4 @@
+# 只有 LangChain 版（--impl langchain）需要；手写版只用标准库
+langchain==1.4.7
+langgraph==1.2.17
+langchain-openai==1.7.2

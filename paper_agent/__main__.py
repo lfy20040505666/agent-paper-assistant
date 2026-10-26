@@ -13,18 +13,24 @@ def main():
     parser.add_argument("task", help="要问的问题或要做的事，例如：找到 3DGS 原论文并写一份速读笔记")
     parser.add_argument("--max-steps", type=int, default=12, help="最多和模型来回几轮，默认 12")
     parser.add_argument("--quiet", action="store_true", help="不打印中间的工具调用")
+    parser.add_argument("--impl", choices=["handwritten", "langchain"], default="handwritten",
+                        help="用哪个版本：手写版（默认，零依赖）或 LangChain 版（需先安装 requirements-langchain.txt）")
     args = parser.parse_args()
 
     load_dotenv()
+    tools = PaperTools(CACHE_DIR, NOTES_DIR)
     try:
-        llm = DeepSeekClient()
-    except LLMError as e:
-        sys.exit(str(e))
-    agent = PaperAgent(llm, PaperTools(CACHE_DIR, NOTES_DIR), max_steps=args.max_steps,
-                       trace_dir=TRACE_DIR, verbose=not args.quiet)
-    try:
+        if args.impl == "langchain":
+            from .lc_agent import LangChainPaperAgent, make_deepseek_model
+            agent = LangChainPaperAgent(make_deepseek_model(), tools, max_steps=args.max_steps,
+                                        trace_dir=TRACE_DIR, verbose=not args.quiet)
+        else:
+            agent = PaperAgent(DeepSeekClient(), tools, max_steps=args.max_steps,
+                               trace_dir=TRACE_DIR, verbose=not args.quiet)
         result = agent.run(args.task)
-    except LLMError as e:
+    except ImportError as e:
+        sys.exit(f"缺少 LangChain 依赖（{e}）。请先运行：.venv/bin/pip install -r requirements-langchain.txt")
+    except (LLMError, RuntimeError) as e:
         sys.exit(str(e))
 
     print("\n" + result.answer)

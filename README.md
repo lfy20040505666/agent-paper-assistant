@@ -3,9 +3,10 @@
 用中文提问，Agent 自己决定去 arXiv 搜论文、下载并读全文、在原文里定位数字，最后给出带出处的回答，或者把速读笔记保存成 Markdown。
 
 - 模型：DeepSeek（OpenAI 兼容接口，原生 Function Calling）
-- **不用任何 Agent 框架**：Agent 循环、工具调度、上下文控制都是手写的，约 600 行 Python（含评测脚本）
-- **零第三方依赖**：只用 Python 标准库 + 系统的 `pdftotext`
-- 带一套自动评测：10 道题，统计成功率、工具调用次数、token 和耗时
+- **两个实现，共用同一套工具和评测**：
+  - 手写版（默认）：Agent 循环、工具调度、上下文控制都是手写的，**零第三方依赖**（只用 Python 标准库 + 系统的 `pdftotext`）
+  - LangChain 版：用 LangChain 1.x 的 `create_agent`（底层 LangGraph）实现同样的功能
+- 带一套自动评测：10 道题，统计成功率、工具调用次数、token 和耗时，可以直接对比两个实现
 
 ## 工作流程
 
@@ -65,6 +66,25 @@
    python3 -m unittest discover tests
    ```
 
+### 使用 LangChain 版
+
+依赖装在项目自己的虚拟环境里（约 99MB，删掉 `.venv` 文件夹即可清除）：
+
+```bash
+python3 -m venv .venv
+.venv/bin/pip install -r requirements-langchain.txt
+.venv/bin/python -m paper_agent --impl langchain "Attention Is All You Need 的 arXiv 编号是多少？"
+.venv/bin/python eval/run_eval.py --impl langchain
+```
+
+用 `.venv/bin/python` 跑单元测试时，会额外跑 3 个 LangChain 版的测试；用系统 Python 跑时，这 3 个会自动跳过。
+
+### 在 VS Code 里调试
+
+`.vscode/launch.json` 里有 5 个调试配置：运行 Agent（手写版 / LangChain 版）、跑全部评测、跑单道评测题、单元测试。LangChain 版的配置会用项目里的 `.venv/bin/python`。需要安装 VS Code 的 Python 扩展（会自带 Python Debugger）。在代码里点行号左边打断点，按 F5 选一个配置启动。
+
+推荐断点位置：`paper_agent/agent.py` 中 `run()` 里的 `calls = msg.get("tool_calls") or []` 这一行，每停一次就是 Agent 的一轮，可以在左侧“变量”面板里看 `msg` 和 `messages` 的内容。
+
 ## 设计要点
 
 - **手写 Agent 循环**（`paper_agent/agent.py`）：每轮把工具结果用 `role: tool` + `tool_call_id` 回传；模型不再请求工具即视为完成。
@@ -79,7 +99,7 @@
 
 题目在 `eval/tasks.json`，分 5 类：查编号、同名论文、查原文数字、原文没有的反例、生成并保存笔记。判分是确定性的规则（回答里是否包含正确编号 / 数字，笔记文件是否存在且包含关键内容），不依赖模型打分。
 
-### 结果（deepseek-chat，2026-10-26，每个版本各跑 1 次）
+### 手写版迭代：v1 → v2（deepseek-chat，2026-10-26，每个版本各跑 1 次）
 
 | 版本 | 通过 | 平均工具调用 | 平均轮数 | 空结果搜索 | 平均输入 token |
 |---|---|---|---|---|---|
@@ -92,8 +112,19 @@
 
 **效果**：4 道查编号的题都变成 1 次搜索就找到，这 4 题的输入 token 合计从 26950 降到 11852（-56%）。
 
+### 手写版 vs LangChain 版（同一时段各跑 1 次，2026-10-26 15:23–15:25）
+
+| 实现 | 通过 | 平均工具调用 | 平均轮数 | 平均输入 token | 平均耗时 | 依赖 | Agent 文件行数 |
+|---|---|---|---|---|---|---|---|
+| 手写版 | 10/10 | 2.2 | 2.5 | 6686 | 6.9s | 无 | 129 |
+| LangChain 版 | 10/10 | 2.0 | 2.4 | 6344 | 6.3s | 99MB | 124 |
+
+- **效果基本一致**：两边用同一段提示词、同一套工具定义、同一个模型，模型每轮看到的内容相同。9 道题的 token 几乎一样，差别主要来自开放式的写笔记题。这道题同一个手写版，两次运行的输入 token 分别是 54784 和 30937，所以两个实现之间的差距，在多次运行的正常波动范围内。
+- **代码量差不多**：框架省掉了循环本身，但为了输出和手写版相同的统计与 trace，需要写适配代码。
+- **行为差异**：步数用完时，手写版会收回工具，再给模型一次收尾作答的机会；LangChain 版的 `ModelCallLimitMiddleware` 会直接结束。这套评测里，两边都没有触发步数上限。
+
 说明：
-- 两个版本都是 10/10，这套题对正确率区分度不够，需要加更难的题。
+- 所有版本都是 10/10，这套题对正确率区分度不够，需要加更难的题。
 - 每个版本只跑了 1 次，模型输出有随机性，数字会有小幅波动。
 - 耗时没有放进对比：v1 包含首次下载 PDF 的时间，两次不可比。
 
@@ -108,7 +139,8 @@
 
 ```
 paper_agent/
-  agent.py      Agent 循环
+  agent.py      Agent 循环（手写版）
+  lc_agent.py   LangChain 版（复用同一套工具和提示词）
   tools.py      4 个工具和它们的 JSON Schema
   llm.py        DeepSeek 接口封装（重试、错误处理）
   config.py     路径和 .env 读取
@@ -116,6 +148,7 @@ paper_agent/
 eval/
   tasks.json    评测题
   run_eval.py   评测脚本
-tests/          离线单元测试（假模型 + 假网络）
+tests/          离线单元测试（假模型 + 假网络），共 16 个
+requirements-langchain.txt  只有 LangChain 版需要的依赖
 docs/代码讲解.md 逐段讲解与面试常见问题
 ```
